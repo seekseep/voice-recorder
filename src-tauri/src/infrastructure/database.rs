@@ -26,10 +26,19 @@ impl AppDb {
                 original_extension TEXT NOT NULL,
                 original_mime_type TEXT NOT NULL,
                 stored_path TEXT NOT NULL,
+                wav_path TEXT,
+                text_content TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );",
         )?;
+        // Migration: add columns if missing (for existing DBs)
+        let _ = conn.execute_batch(
+            "ALTER TABLE audio_files ADD COLUMN wav_path TEXT;",
+        );
+        let _ = conn.execute_batch(
+            "ALTER TABLE audio_files ADD COLUMN text_content TEXT;",
+        );
         Ok(())
     }
 }

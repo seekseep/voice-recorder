@@ -1,0 +1,42 @@
+use crate::infrastructure::audio_converter::transcribe_audio;
+use crate::infrastructure::audio_file::find_audio_file_stored_path;
+use crate::infrastructure::database::AppDb;
+use chrono::Utc;
+use std::path::Path;
+use tauri::{Manager, State};
+
+#[tauri::command]
+pub fn transcribe_audio_file(
+    app_handle: tauri::AppHandle,
+    db: State<'_, AppDb>,
+    id: String,
+    language: String,
+) -> Result<String, String> {
+    let stored_path = find_audio_file_stored_path(&db, &id)?;
+    let input_path = Path::new(&stored_path);
+
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {e}"))?;
+    let model_path = app_data_dir.join("models").join("ggml-base.bin");
+
+    if !model_path.exists() {
+        return Err("Whisper model not found. Place ggml-base.bin in the models directory.".into());
+    }
+
+    let text = transcribe_audio(input_path, &model_path, &language)?;
+
+    // Save to DB
+    let now = Utc::now().to_rfc3339();
+    {
+        let conn = db.conn.lock().map_err(|e| format!("DB lock error: {e}"))?;
+        conn.execute(
+            "UPDATE audio_files SET text_content = ?1, updated_at = ?2 WHERE id = ?3",
+            (&text, &now, &id),
+        )
+        .map_err(|e| format!("DB update error: {e}"))?;
+    }
+
+    Ok(text)
+}

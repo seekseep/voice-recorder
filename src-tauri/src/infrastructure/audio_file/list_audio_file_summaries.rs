@@ -6,7 +6,7 @@ pub fn list_audio_file_summaries(db: &State<'_, AppDb>) -> Result<Vec<AudioFileS
     let conn = db.conn.lock().map_err(|e| format!("DB lock error: {e}"))?;
     let mut stmt = conn
         .prepare(
-            "SELECT id, name, original_extension, original_mime_type, created_at
+            "SELECT id, name, original_extension, original_mime_type, text_content, created_at
              FROM audio_files
              ORDER BY created_at DESC",
         )
@@ -19,7 +19,8 @@ pub fn list_audio_file_summaries(db: &State<'_, AppDb>) -> Result<Vec<AudioFileS
                 name: row.get(1)?,
                 original_extension: row.get(2)?,
                 original_mime_type: row.get(3)?,
-                created_at: row.get(4)?,
+                text_content: row.get(4)?,
+                created_at: row.get(5)?,
             })
         })
         .map_err(|e| format!("DB query error: {e}"))?;

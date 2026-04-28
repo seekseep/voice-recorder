@@ -16,6 +16,7 @@ pub struct AudioFileSummary {
     pub name: String,
     pub original_extension: String,
     pub original_mime_type: String,
+    pub text_content: Option<String>,
     pub created_at: String,
 }
 
@@ -27,13 +28,8 @@ pub struct AudioFileDetail {
     pub original_extension: String,
     pub original_mime_type: String,
     pub stored_path: String,
+    pub wav_path: Option<String>,
+    pub text_content: Option<String>,
     pub created_at: String,
     pub updated_at: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ConvertResult {
-    pub converted_path: String,
-    pub target_extension: String,
 }

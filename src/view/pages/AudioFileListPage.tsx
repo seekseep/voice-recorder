@@ -1,9 +1,13 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   listAudioFiles,
   deleteAudioFile,
+  saveRecording,
 } from "../../infrastructure/repositories/audio-file-repository";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PageLayout } from "../components/PageLayout";
 
 type Props = {
   onNavigate: (path: string) => void;
@@ -12,8 +16,14 @@ type Props = {
 export function AudioFileListPage({ onNavigate }: Props) {
   const queryClient = useQueryClient();
   const [actionError, setActionError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { data: files = [], isLoading, error } = useQuery({
+  const {
+    data: files = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["audioFiles"],
     queryFn: async () => {
       const result = await listAudioFiles();
@@ -34,70 +44,120 @@ export function AudioFileListPage({ onNavigate }: Props) {
     [queryClient],
   );
 
+  const handleUpload = useCallback(async () => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileSelected = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      setUploading(true);
+      setActionError(null);
+
+      const arrayBuffer = await file.arrayBuffer();
+      const bytes = Array.from(new Uint8Array(arrayBuffer));
+      const extension = file.name.split(".").pop() ?? "bin";
+      const name = file.name.replace(/\.[^.]+$/, "");
+
+      const result = await saveRecording({
+        name,
+        bytes,
+        mimeType: file.type || "audio/unknown",
+        extension,
+      });
+
+      setUploading(false);
+
+      if (result.ok) {
+        queryClient.invalidateQueries({ queryKey: ["audioFiles"] });
+      } else {
+        setActionError(result.error.message);
+      }
+
+      // Reset input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    },
+    [queryClient],
+  );
+
   const displayError = error instanceof Error ? error.message : actionError;
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-5 py-8">
-      <section className="w-full max-w-5xl rounded-[2rem] bg-zinc-900/95 px-8 py-10 shadow-2xl ring-1 ring-white/5 sm:px-12 sm:py-14">
-        <h1 className="mb-6 text-center text-4xl font-extrabold tracking-tight text-white">
-          録音一覧
-        </h1>
+    <PageLayout>
+      <h1 className="mb-4 text-center text-2xl font-bold text-foreground">
+        録音一覧
+      </h1>
 
-        <div className="mb-8 flex justify-center">
-          <button
-            className="min-w-48 rounded-full bg-red-600 px-6 py-4 text-xl font-bold text-white transition hover:-translate-y-0.5 hover:bg-red-500"
-            onClick={() => onNavigate("record")}
-            type="button"
+      <div className="mb-6 flex justify-center gap-3">
+        <Button
+          variant="destructive"
+          className="rounded-full bg-red-600 px-6 py-3 font-bold text-white hover:bg-red-500"
+          onClick={() => onNavigate("record")}
+        >
+          新規録音
+        </Button>
+        <Button
+          variant="outline"
+          className="rounded-full px-6 py-3 font-bold"
+          onClick={handleUpload}
+          disabled={uploading}
+        >
+          {uploading ? "アップロード中..." : "ファイルを選択"}
+        </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="audio/*"
+          className="hidden"
+          onChange={handleFileSelected}
+        />
+      </div>
+
+      {isLoading && (
+        <p className="text-center text-muted-foreground">読み込み中...</p>
+      )}
+      {displayError && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{displayError}</AlertDescription>
+        </Alert>
+      )}
+
+      {!isLoading && files.length === 0 && !error && (
+        <p className="text-center text-muted-foreground">録音がありません</p>
+      )}
+
+      <ul className="flex flex-col gap-2">
+        {files.map((file) => (
+          <li
+            key={file.id}
+            className="flex items-center justify-between rounded-lg bg-zinc-800/80 px-4 py-3 ring-1 ring-white/5"
           >
-            新規録音
-          </button>
-        </div>
-
-        {isLoading && (
-          <p className="text-center text-lg text-zinc-400">読み込み中...</p>
-        )}
-        {displayError && (
-          <div className="mb-4 rounded-2xl bg-red-950/70 px-4 py-3 text-lg text-red-200">
-            {displayError}
-          </div>
-        )}
-
-        {!isLoading && files.length === 0 && !error && (
-          <p className="text-center text-lg text-zinc-400">
-            録音ファイルがありません
-          </p>
-        )}
-
-        <ul className="flex flex-col gap-3">
-          {files.map((file) => (
-            <li
-              key={file.id}
-              className="flex items-center justify-between rounded-xl bg-zinc-800/80 px-5 py-4 ring-1 ring-white/5"
+            <Button
+              variant="ghost"
+              className="flex h-auto flex-1 flex-col items-start gap-0.5 text-left"
+              onClick={() => onNavigate(`detail/${file.id}`)}
             >
-              <button
-                className="flex flex-1 flex-col gap-1 text-left"
-                onClick={() => onNavigate(`detail/${file.id}`)}
-                type="button"
-              >
-                <span className="text-lg font-semibold text-white">
-                  {file.name}
-                </span>
-                <span className="text-sm text-zinc-400">
-                  .{file.originalExtension} ・{" "}
-                  {new Date(file.createdAt).toLocaleString()}
-                </span>
-              </button>
-              <button
-                className="ml-4 rounded-lg bg-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 transition hover:bg-red-700 hover:text-white"
-                onClick={() => handleDelete(file.id)}
-                type="button"
-              >
-                削除
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-    </main>
+              <span className="font-medium text-foreground">{file.name}</span>
+              <span className="text-xs text-muted-foreground">
+                {new Date(file.createdAt).toLocaleString()}
+                {file.textContent && " ・ 文字起こし済み"}
+              </span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-3 text-xs text-muted-foreground hover:text-red-400"
+              onClick={() => handleDelete(file.id)}
+            >
+              削除
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </PageLayout>
   );
 }

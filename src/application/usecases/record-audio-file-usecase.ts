@@ -1,5 +1,6 @@
 import {
   RecorderService,
+  type RecordingMonitorSnapshot,
   type RecordedAudio,
   type RecorderErrorCode,
 } from "../../infrastructure/services/recorder-service";
@@ -15,10 +16,30 @@ export type RecordAudioFileErrorCode =
   | SaveRecordingErrorCode
   | "recording_data_empty";
 
+export type RecordingMonitorViewModel = {
+  elapsedMs: number;
+  elapsedLabel: string;
+  waveform: number[];
+};
+
 export function executeStartRecording(
   recorder: RecorderService,
 ): Promise<AppResult<void, RecorderErrorCode>> {
   return recorder.start();
+}
+
+export function executeGetRecordingMonitorSnapshot(
+  recorder: RecorderService,
+): AppResult<RecordingMonitorViewModel, RecorderErrorCode> {
+  const result = recorder.getMonitorSnapshot();
+  if (!result.ok) {
+    return result;
+  }
+
+  return {
+    ok: true,
+    data: mapRecordingMonitorViewModel(result.data),
+  };
 }
 
 export async function executeRecordAudioFile(
@@ -57,4 +78,31 @@ export async function executeStopAndSaveRecording(
   }
 
   return executeRecordAudioFile(stopResult.data);
+}
+
+function mapRecordingMonitorViewModel(
+  snapshot: RecordingMonitorSnapshot,
+): RecordingMonitorViewModel {
+  return {
+    elapsedMs: snapshot.elapsedMs,
+    elapsedLabel: formatElapsedLabel(snapshot.elapsedMs),
+    waveform: snapshot.waveform,
+  };
+}
+
+function formatElapsedLabel(elapsedMs: number): string {
+  const totalSeconds = Math.floor(elapsedMs / 1000);
+  const seconds = totalSeconds % 60;
+  const minutes = Math.floor(totalSeconds / 60) % 60;
+  const hours = Math.floor(totalSeconds / 3600);
+
+  if (hours > 0) {
+    return [hours, minutes, seconds]
+      .map((value) => value.toString().padStart(2, "0"))
+      .join(":");
+  }
+
+  return [minutes, seconds]
+    .map((value) => value.toString().padStart(2, "0"))
+    .join(":");
 }

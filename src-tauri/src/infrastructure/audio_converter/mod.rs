@@ -1,3 +1,3 @@
-mod convert_to_mp3;
+mod transcribe;
 
-pub use convert_to_mp3::convert_to_mp3;
+pub use transcribe::transcribe_audio;

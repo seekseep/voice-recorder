@@ -380,3 +380,218 @@ src-tauri/src/
 5. `app_data_dir` 配下に保存ファイルができる
 6. SQLite に 1 レコード作られる
 7. 失敗時に UI にエラーが出る
+
+---
+
+## 追加設計: 録音中の波形と録音時間
+
+この機能は **録音中だけ live 表示** する。  
+保存後に波形を再生成する設計にはせず、まずは **現在録音している入力音声の可視化** に絞る。
+
+### 目的
+
+1. 録音が本当に動いていることを視覚的にわかりやすくする
+2. 録音開始からの経過時間を明示する
+3. React コンポーネントを複雑にせず、既存の `AppResult` 方針を壊さない
+
+### 責務分離
+
+#### `src/infrastructure/services/recorder-service.ts`
+
+録音サービスが引き続きブラウザ API を所有する。  
+ここに **録音監視用の AudioContext / AnalyserNode** を追加する。
+
+持つ責務:
+
+- `MediaRecorder` の開始 / 停止
+- `MediaStream` の管理
+- `AudioContext`
+- `MediaStreamAudioSourceNode`
+- `AnalyserNode`
+- 録音開始時刻の保持
+- 波形サンプル取得
+
+#### `src/application/usecases/`
+
+React から直接 `RecorderService` の内部状態を読ませず、  
+**UI 用 snapshot を返す usecase** を追加する。
+
+候補:
+
+- `get-recording-monitor-snapshot-usecase.ts`
+
+この usecase は次を返す:
+
+- 経過時間
+- 表示用フォーマット済み時間
+- 波形バー配列
+
+#### `src/view/pages/RecordAudioPage.tsx`
+
+React 側は次だけを行う:
+
+- 録音中に `requestAnimationFrame` ループを開始する
+- usecase から snapshot を受け取って state を更新する
+- 波形と時間を描画する
+
+コンポーネント内で `try/catch` は使わない。  
+ブラウザ音声 API は service 側に閉じ込める。
+
+### データ形
+
+#### RecorderService が返す低レベル snapshot
+
+```ts
+type RecordingMonitorSnapshot = {
+  elapsedMs: number;
+  waveform: number[];
+};
+```
+
+`waveform` は **0.0 - 1.0** に正規化した配列とする。  
+UI はこの配列をそのまま棒グラフ表示できるようにする。
+
+#### usecase が返す UI 向け snapshot
+
+```ts
+type RecordingMonitorViewModel = {
+  elapsedMs: number;
+  elapsedLabel: string; // 00:13
+  waveform: number[];
+};
+```
+
+### RecorderService の追加 API
+
+既存 API:
+
+- `start()`
+- `stop()`
+- `dispose()`
+
+追加 API:
+
+```ts
+getMonitorSnapshot(): AppResult<RecordingMonitorSnapshot, RecorderErrorCode>
+```
+
+このメソッドは:
+
+- 録音中でなければ失敗を返す
+- `AnalyserNode` から時系列データを取得する
+- 画面表示用に downsample した配列を返す
+- `performance.now()` または録音開始時刻との差分で `elapsedMs` を返す
+
+### 波形生成方法
+
+実装方針:
+
+1. `AudioContext` を録音開始時に生成
+2. `MediaStreamAudioSourceNode` を `mediaStream` から作成
+3. `AnalyserNode` を接続
+4. `getByteTimeDomainData()` で PCM 風データを取得
+5. それを 32 本前後の棒データへ圧縮する
+
+推奨パラメータ:
+
+- `fftSize`: 1024 または 2048
+- 表示バー数: 32
+
+downsample は **各区間の平均絶対振幅** を使う。  
+これで細かすぎない安定した波形になる。
+
+### 録音時間
+
+録音時間は **録音開始時刻からの経過時間** を使う。
+
+表示形式:
+
+- 1 時間未満: `mm:ss`
+- 1 時間以上: `hh:mm:ss`
+
+format は usecase 側で行う。  
+React 側では文字列をそのまま表示するだけにする。
+
+### UI 構成
+
+`RecordAudioPage` に次を追加する。
+
+1. 録音中インジケーター
+2. 経過時間表示
+3. 波形バー表示
+
+Tailwind での構成イメージ:
+
+- 時間表示: 中央寄せの大きい monospace 風表示
+- 波形表示: 横並びの bar 32 本
+- 各 bar は `h-2` から `h-20` 程度の高さに変化
+
+### state 設計
+
+`RecordAudioPage` 側の追加 state:
+
+```ts
+const [elapsedLabel, setElapsedLabel] = useState("00:00");
+const [waveform, setWaveform] = useState<number[]>(DEFAULT_WAVEFORM);
+```
+
+録音開始時:
+
+- monitor loop 開始
+- `elapsedLabel` を `00:00` に初期化
+- `waveform` を初期配列に戻す
+
+録音停止時:
+
+- monitor loop 停止
+- `waveform` を初期配列に戻す
+
+### monitor loop
+
+React 側では `requestAnimationFrame` を使う。
+
+理由:
+
+- setInterval より描画タイミングに同期しやすい
+- 波形表示との相性がよい
+
+流れ:
+
+1. `state === "recording"` で loop 開始
+2. `executeGetRecordingMonitorSnapshot(recorder)` を呼ぶ
+3. 成功なら `elapsedLabel` と `waveform` を更新
+4. `state !== "recording"` で loop 停止
+5. unmount 時も cancel
+
+### エラー方針
+
+monitor 取得失敗は **録音本体の失敗と分ける**。
+
+追加候補 error code:
+
+- `recording_monitor_unavailable`
+
+ただし monitor 表示取得に失敗しても、録音そのものが進んでいるなら  
+**即座に録音停止扱いにはしない** 方がよい。
+
+推奨方針:
+
+- monitor 失敗時は波形表示だけを止める
+- 時間表示は最後の値を保持する
+- 録音 stop/save フローはそのまま継続する
+
+### 実装単位
+
+1. `RecorderService` に analyser と elapsed 計測を追加
+2. `get-recording-monitor-snapshot-usecase.ts` を追加
+3. `RecordAudioPage` に monitor state と animation loop を追加
+4. Tailwind で波形 UI を追加
+5. stop/dispose 時に AudioContext を確実に閉じる
+
+### 完了条件
+
+1. 録音開始後すぐに `00:00` から時間が進む
+2. 入力音声に応じて波形バーが変化する
+3. 録音停止で時間と波形更新が止まる
+4. 保存フローは既存どおり動く
+5. monitor 関連で React コンポーネントに `try/catch` を増やさない
