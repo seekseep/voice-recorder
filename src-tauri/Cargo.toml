@@ -29,4 +29,5 @@ chrono = "0.4"
 matroska-demuxer = "0.4"
 audiopus_sys = { version = "0.2", features = ["static"] }
 hound = "3.5"
+ureq = "3"
 

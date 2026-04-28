@@ -19,10 +19,10 @@ pub fn transcribe_audio_file(
         .path()
         .app_data_dir()
         .map_err(|e| format!("Failed to get app data dir: {e}"))?;
-    let model_path = app_data_dir.join("models").join("ggml-base.bin");
+    let model_path = app_data_dir.join("models").join("ggml-medium.bin");
 
     if !model_path.exists() {
-        return Err("Whisper model not found. Place ggml-base.bin in the models directory.".into());
+        return Err("Whisper model not found. Place ggml-medium.bin in the models directory.".into());
     }
 
     let wav_path = detail.wav_path.as_deref().map(Path::new);

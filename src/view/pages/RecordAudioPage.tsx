@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { RecorderService } from "../../infrastructure/services/recorder-service";
 import {
   executeGetRecordingMonitorSnapshot,
@@ -7,23 +8,30 @@ import {
 } from "../../application/usecases/record-audio-file-usecase";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-type RecordingState = "idle" | "recording" | "saving";
+type RecordingState = "idle" | "preparing" | "recording" | "saving";
 
 const DEFAULT_WAVEFORM = Array.from({ length: 32 }, () => 0.04);
+const COUNTDOWN_SECONDS = 3;
 
 export function RecordAudioPage() {
+  const queryClient = useQueryClient();
   const [state, setState] = useState<RecordingState>("idle");
+  const [countdown, setCountdown] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [elapsedLabel, setElapsedLabel] = useState("00:00");
   const [waveform, setWaveform] = useState<number[]>(DEFAULT_WAVEFORM);
   const recorderRef = useRef<RecorderService | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     return () => {
       if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (countdownRef.current !== null) {
+        clearInterval(countdownRef.current);
       }
       recorderRef.current?.dispose();
       recorderRef.current = null;
@@ -68,6 +76,7 @@ export function RecordAudioPage() {
     setElapsedLabel("00:00");
     setWaveform(DEFAULT_WAVEFORM);
 
+    // Start recorder first (request mic permission, etc.)
     const recorder = new RecorderService();
     const result = await executeStartRecording(recorder);
 
@@ -79,7 +88,23 @@ export function RecordAudioPage() {
     }
 
     recorderRef.current = recorder;
-    setState("recording");
+
+    // Show countdown while recorder warms up
+    setState("preparing");
+    setCountdown(COUNTDOWN_SECONDS);
+
+    let remaining = COUNTDOWN_SECONDS;
+    countdownRef.current = setInterval(() => {
+      remaining -= 1;
+      setCountdown(remaining);
+      if (remaining <= 0) {
+        if (countdownRef.current !== null) {
+          clearInterval(countdownRef.current);
+          countdownRef.current = null;
+        }
+        setState("recording");
+      }
+    }, 1000);
   }, []);
 
   const handleStop = useCallback(async () => {
@@ -99,17 +124,22 @@ export function RecordAudioPage() {
       return;
     }
 
+    queryClient.invalidateQueries({ queryKey: ["audioFiles"] });
     setLastSaved(
       `保存完了: ${stopResult.data.id} (${stopResult.data.originalMimeType}, .${stopResult.data.originalExtension})`,
     );
     setState("idle");
-  }, []);
+  }, [queryClient]);
 
   return (
     <div className="flex h-full flex-col items-center justify-center p-6">
-      {/* Timer */}
+      {/* Timer / Countdown */}
       <div className="mb-4 font-mono text-3xl font-light tabular-nums tracking-wider text-foreground">
-        {elapsedLabel}
+        {state === "preparing" ? (
+          <span className="text-5xl font-semibold text-destructive">{countdown}</span>
+        ) : (
+          elapsedLabel
+        )}
       </div>
 
       {/* Waveform */}
@@ -118,7 +148,11 @@ export function RecordAudioPage() {
           <div
             key={`wave-${index}`}
             className={`min-h-1 flex-1 rounded-full transition-[height] duration-75 ${
-              state === "saving" ? "bg-muted-foreground/40" : "bg-primary/70"
+              state === "saving"
+                ? "bg-muted-foreground/40"
+                : state === "preparing"
+                  ? "bg-muted-foreground/20"
+                  : "bg-primary/70"
             }`}
             style={{ height: `${Math.max(6, Math.round(bar * 120))}px` }}
           />
@@ -137,6 +171,12 @@ export function RecordAudioPage() {
           </button>
         )}
 
+        {state === "preparing" && (
+          <div className="flex size-14 items-center justify-center rounded-full border-2 border-muted-foreground opacity-50">
+            <div className="size-5 rounded-full bg-muted-foreground" />
+          </div>
+        )}
+
         {state === "recording" && (
           <button
             type="button"
@@ -153,6 +193,9 @@ export function RecordAudioPage() {
       </div>
 
       {/* Status messages */}
+      {state === "preparing" && (
+        <p className="mt-3 text-sm text-muted-foreground">準備中...</p>
+      )}
       {state === "recording" && (
         <p className="mt-3 text-xs text-muted-foreground">録音中</p>
       )}

@@ -66,6 +66,7 @@ export function AudioFileDetailPage({ id, onNavigate }: Props) {
       return;
     }
     queryClient.invalidateQueries({ queryKey: ["audioFile", id] });
+    queryClient.invalidateQueries({ queryKey: ["audioFiles"] });
   }, [id, queryClient]);
 
   const handleDelete = useCallback(async () => {
@@ -101,13 +102,16 @@ export function AudioFileDetailPage({ id, onNavigate }: Props) {
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {file && !file.textContent && !transcribing && (
-            <Button size="sm" onClick={handleTranscribe}>
-              文字起こし
-            </Button>
-          )}
-          {transcribing && (
-            <span className="text-xs text-muted-foreground">文字起こし中...</span>
+          {file && (
+            transcribing ? (
+              <Button size="sm" disabled className="animate-pulse">
+                文字起こし中...
+              </Button>
+            ) : (
+              <Button size="sm" variant={file.textContent ? "outline" : "default"} onClick={handleTranscribe}>
+                {file.textContent ? "再文字起こし" : "文字起こし"}
+              </Button>
+            )
           )}
           <Button
             variant="ghost"

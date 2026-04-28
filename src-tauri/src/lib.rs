@@ -29,6 +29,8 @@ pub fn run() {
             commands::audio_file::delete_audio_file::delete_audio_file,
             commands::audio_file::get_audio_file_bytes::get_audio_file_bytes,
             commands::audio_file::transcribe_audio_file::transcribe_audio_file,
+            commands::whisper_model::check_model::check_whisper_model,
+            commands::whisper_model::download_model::download_whisper_model,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

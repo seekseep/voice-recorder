@@ -1,14 +1,36 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Sidebar } from "./view/components/Sidebar";
 import { RecordAudioPage } from "./view/pages/RecordAudioPage";
 import { AudioFileDetailPage } from "./view/pages/AudioFileDetailPage";
+import { ModelSetupPage } from "./view/pages/ModelSetupPage";
+import { checkWhisperModel } from "./infrastructure/repositories/whisper-model-repository";
 
 type Route =
   | { page: "record" }
   | { page: "detail"; id: string };
 
+type AppState = "loading" | "setup" | "ready";
+
 function App() {
+  const [appState, setAppState] = useState<AppState>("loading");
+  const [modelName, setModelName] = useState("ggml-medium.bin");
   const [route, setRoute] = useState<Route>({ page: "record" });
+
+  useEffect(() => {
+    (async () => {
+      const result = await checkWhisperModel();
+      if (result.ok && result.data.exists) {
+        setAppState("ready");
+      } else {
+        if (result.ok) setModelName(result.data.modelName);
+        setAppState("setup");
+      }
+    })();
+  }, []);
+
+  const handleSetupComplete = useCallback(() => {
+    setAppState("ready");
+  }, []);
 
   const handleNavigate = useCallback((path: string) => {
     if (path === "record") {
@@ -21,6 +43,23 @@ function App() {
   const handleSelectFile = useCallback((id: string) => {
     setRoute({ page: "detail", id });
   }, []);
+
+  if (appState === "loading") {
+    return (
+      <main className="flex min-h-screen items-center justify-center">
+        <p className="text-zinc-400">読み込み中...</p>
+      </main>
+    );
+  }
+
+  if (appState === "setup") {
+    return (
+      <ModelSetupPage
+        modelName={modelName}
+        onComplete={handleSetupComplete}
+      />
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden">
