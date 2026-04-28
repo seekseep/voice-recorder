@@ -1,39 +1,42 @@
 import { useState, useCallback } from "react";
+import { Sidebar } from "./view/components/Sidebar";
 import { RecordAudioPage } from "./view/pages/RecordAudioPage";
-import { AudioFileListPage } from "./view/pages/AudioFileListPage";
 import { AudioFileDetailPage } from "./view/pages/AudioFileDetailPage";
 
 type Route =
-  | { page: "list" }
   | { page: "record" }
   | { page: "detail"; id: string };
 
-function parseRoute(path: string): Route {
-  if (path === "record") return { page: "record" };
-  if (path.startsWith("detail/")) {
-    return { page: "detail", id: path.slice("detail/".length) };
-  }
-  return { page: "list" };
-}
-
 function App() {
-  const [route, setRoute] = useState<Route>({ page: "list" });
+  const [route, setRoute] = useState<Route>({ page: "record" });
 
   const handleNavigate = useCallback((path: string) => {
-    setRoute(parseRoute(path));
+    if (path === "record") {
+      setRoute({ page: "record" });
+    } else if (path.startsWith("detail/")) {
+      setRoute({ page: "detail", id: path.slice("detail/".length) });
+    }
   }, []);
 
-  switch (route.page) {
-    case "record":
-      return <RecordAudioPage onNavigate={handleNavigate} />;
-    case "detail":
-      return (
-        <AudioFileDetailPage id={route.id} onNavigate={handleNavigate} />
-      );
-    case "list":
-    default:
-      return <AudioFileListPage onNavigate={handleNavigate} />;
-  }
+  const handleSelectFile = useCallback((id: string) => {
+    setRoute({ page: "detail", id });
+  }, []);
+
+  return (
+    <div className="flex h-screen overflow-hidden">
+      <Sidebar
+        selectedFileId={route.page === "detail" ? route.id : null}
+        onSelectFile={handleSelectFile}
+        onNavigate={handleNavigate}
+      />
+      <main className="flex-1 overflow-y-auto">
+        {route.page === "record" && <RecordAudioPage />}
+        {route.page === "detail" && (
+          <AudioFileDetailPage id={route.id} onNavigate={handleNavigate} />
+        )}
+      </main>
+    </div>
+  );
 }
 
 export default App;

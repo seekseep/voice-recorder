@@ -1,9 +1,10 @@
+use crate::infrastructure::audio_converter::convert_to_wav;
 use crate::infrastructure::audio_file::insert_audio_file_record;
 use crate::infrastructure::audio_file::SaveRecordingResponse;
 use crate::infrastructure::database::AppDb;
 use chrono::Utc;
 use std::fs;
-use std::process::Command;
+use std::path::Path;
 use tauri::{Manager, State};
 use uuid::Uuid;
 
@@ -36,24 +37,9 @@ pub fn save_recording_data(
 
     // Auto-convert to WAV (16kHz mono for whisper compatibility)
     let wav_path = file_dir.join("audio.wav");
-    let wav_result = Command::new("ffmpeg")
-        .args([
-            "-i",
-            &stored_path,
-            "-ar",
-            "16000",
-            "-ac",
-            "1",
-            "-y",
-            wav_path.to_str().ok_or("Invalid wav path")?,
-        ])
-        .output();
-
-    let wav_path_str = match wav_result {
-        Ok(output) if output.status.success() => {
-            Some(wav_path.to_str().ok_or("Invalid wav path")?.to_string())
-        }
-        _ => None, // WAV conversion failed silently; original is still saved
+    let wav_path_str = match convert_to_wav(Path::new(&stored_path), &wav_path) {
+        Ok(()) => Some(wav_path.to_str().ok_or("Invalid wav path")?.to_string()),
+        Err(_) => None, // WAV conversion failed silently; original is still saved
     };
 
     insert_audio_file_record(

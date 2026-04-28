@@ -1,5 +1,5 @@
 use crate::infrastructure::audio_converter::transcribe_audio;
-use crate::infrastructure::audio_file::find_audio_file_stored_path;
+use crate::infrastructure::audio_file::find_audio_file_detail;
 use crate::infrastructure::database::AppDb;
 use chrono::Utc;
 use std::path::Path;
@@ -12,8 +12,8 @@ pub fn transcribe_audio_file(
     id: String,
     language: String,
 ) -> Result<String, String> {
-    let stored_path = find_audio_file_stored_path(&db, &id)?;
-    let input_path = Path::new(&stored_path);
+    let detail = find_audio_file_detail(&db, &id)?;
+    let input_path = Path::new(&detail.stored_path);
 
     let app_data_dir = app_handle
         .path()
@@ -25,7 +25,9 @@ pub fn transcribe_audio_file(
         return Err("Whisper model not found. Place ggml-base.bin in the models directory.".into());
     }
 
-    let text = transcribe_audio(input_path, &model_path, &language)?;
+    let wav_path = detail.wav_path.as_deref().map(Path::new);
+
+    let text = transcribe_audio(&app_handle, input_path, &model_path, &language, wav_path)?;
 
     // Save to DB
     let now = Utc::now().to_rfc3339();

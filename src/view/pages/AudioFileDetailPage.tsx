@@ -8,7 +8,6 @@ import {
 } from "../../infrastructure/repositories/audio-file-repository";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { PageLayout } from "../components/PageLayout";
 
 type Props = {
   id: string;
@@ -73,7 +72,7 @@ export function AudioFileDetailPage({ id, onNavigate }: Props) {
     const result = await deleteAudioFile(id);
     if (result.ok) {
       queryClient.invalidateQueries({ queryKey: ["audioFiles"] });
-      onNavigate("list");
+      onNavigate("record");
     } else {
       setActionError(result.error.message);
     }
@@ -81,72 +80,71 @@ export function AudioFileDetailPage({ id, onNavigate }: Props) {
 
   const displayError = error instanceof Error ? error.message : actionError;
 
+  if (isLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-sm text-muted-foreground">読み込み中...</p>
+      </div>
+    );
+  }
+
   return (
-    <PageLayout>
-      <Button
-        variant="link"
-        className="mb-4 px-0 text-sm text-muted-foreground hover:text-foreground"
-        onClick={() => onNavigate("list")}
-      >
-        ← 戻る
-      </Button>
-
-      {isLoading && (
-        <p className="text-center text-muted-foreground">読み込み中...</p>
-      )}
-      {displayError && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{displayError}</AlertDescription>
-        </Alert>
-      )}
-
-      {file && (
-        <>
-          <h1 className="mb-1 text-xl font-bold text-foreground">{file.name}</h1>
-          <p className="mb-4 text-sm text-muted-foreground">
-            {new Date(file.createdAt).toLocaleString()}
-          </p>
-
-          {audioUrl && (
-            <audio controls src={audioUrl} className="mb-6 w-full" />
+    <div className="flex h-full flex-col">
+      {/* Header bar */}
+      <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-2">
+        <div className="min-w-0">
+          <h1 className="truncate text-sm font-semibold">{file?.name}</h1>
+          {file && (
+            <p className="text-[11px] text-muted-foreground">
+              {new Date(file.createdAt).toLocaleString()}
+            </p>
           )}
-
-          {file.textContent ? (
-            <div className="mb-6 rounded-xl bg-zinc-800/80 px-4 py-3 ring-1 ring-white/5">
-              <p className="mb-1 text-xs font-semibold text-violet-400">
-                文字起こし
-              </p>
-              <p className="whitespace-pre-wrap leading-relaxed text-zinc-200">
-                {file.textContent}
-              </p>
-            </div>
-          ) : (
-            <div className="mb-6 flex justify-center">
-              {transcribing ? (
-                <p className="text-muted-foreground">文字起こし中...</p>
-              ) : (
-                <Button
-                  className="rounded-full bg-violet-700 px-6 py-3 font-bold text-white hover:bg-violet-600"
-                  onClick={handleTranscribe}
-                >
-                  文字起こし
-                </Button>
-              )}
-            </div>
-          )}
-
-          <div className="flex justify-center">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-sm text-muted-foreground hover:text-red-400"
-              onClick={handleDelete}
-            >
-              削除
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {file && !file.textContent && !transcribing && (
+            <Button size="sm" onClick={handleTranscribe}>
+              文字起こし
             </Button>
+          )}
+          {transcribing && (
+            <span className="text-xs text-muted-foreground">文字起こし中...</span>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={handleDelete}
+          >
+            削除
+          </Button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-4">
+        {displayError && (
+          <Alert variant="destructive" className="mb-3">
+            <AlertDescription>{displayError}</AlertDescription>
+          </Alert>
+        )}
+
+        {audioUrl && (
+          <div className="mb-4">
+            <audio controls src={audioUrl} className="w-full" />
           </div>
-        </>
-      )}
-    </PageLayout>
+        )}
+
+        {file?.textContent && (
+          <div className="rounded-lg border border-border bg-card p-3">
+            <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+              文字起こし
+            </p>
+            <p className="whitespace-pre-wrap text-sm leading-relaxed">
+              {file.textContent}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

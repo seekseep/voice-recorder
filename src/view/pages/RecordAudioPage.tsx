@@ -1,36 +1,72 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RecorderService } from "../../infrastructure/services/recorder-service";
 import {
+  executeGetRecordingMonitorSnapshot,
   executeStartRecording,
   executeStopAndSaveRecording,
 } from "../../application/usecases/record-audio-file-usecase";
-import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { PageLayout } from "../components/PageLayout";
 
 type RecordingState = "idle" | "recording" | "saving";
 
-type Props = {
-  onNavigate: (path: string) => void;
-};
+const DEFAULT_WAVEFORM = Array.from({ length: 32 }, () => 0.04);
 
-export function RecordAudioPage({ onNavigate }: Props) {
+export function RecordAudioPage() {
   const [state, setState] = useState<RecordingState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const [elapsedLabel, setElapsedLabel] = useState("00:00");
+  const [waveform, setWaveform] = useState<number[]>(DEFAULT_WAVEFORM);
   const recorderRef = useRef<RecorderService | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     return () => {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
       recorderRef.current?.dispose();
       recorderRef.current = null;
     };
   }, []);
 
+  useEffect(() => {
+    if (state !== "recording") {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      return;
+    }
+
+    const renderNextFrame = () => {
+      const recorder = recorderRef.current;
+      if (!recorder) return;
+
+      const result = executeGetRecordingMonitorSnapshot(recorder);
+      if (result.ok) {
+        setElapsedLabel(result.data.elapsedLabel);
+        setWaveform(result.data.waveform);
+      }
+
+      animationFrameRef.current = requestAnimationFrame(renderNextFrame);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(renderNextFrame);
+
+    return () => {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
+  }, [state]);
+
   const handleStart = useCallback(async () => {
     setError(null);
     setLastSaved(null);
+    setElapsedLabel("00:00");
+    setWaveform(DEFAULT_WAVEFORM);
 
     const recorder = new RecorderService();
     const result = await executeStartRecording(recorder);
@@ -48,9 +84,7 @@ export function RecordAudioPage({ onNavigate }: Props) {
 
   const handleStop = useCallback(async () => {
     const recorder = recorderRef.current;
-    if (!recorder) {
-      return;
-    }
+    if (!recorder) return;
 
     setState("saving");
     setError(null);
@@ -72,65 +106,69 @@ export function RecordAudioPage({ onNavigate }: Props) {
   }, []);
 
   return (
-    <PageLayout className="text-center">
-      <Badge variant="secondary" className="mb-2 uppercase tracking-[0.3em]">
-        Phase 1
-      </Badge>
-      <h1 className="mb-3 text-5xl font-extrabold tracking-tight text-foreground sm:text-6xl">
-        Voice Recorder
-      </h1>
-      <p className="mx-auto max-w-3xl text-2xl leading-relaxed text-muted-foreground">
-        録音を開始して、停止後にローカル保存フローへ渡します。
-      </p>
+    <div className="flex h-full flex-col items-center justify-center p-6">
+      {/* Timer */}
+      <div className="mb-4 font-mono text-3xl font-light tabular-nums tracking-wider text-foreground">
+        {elapsedLabel}
+      </div>
 
-      <div className="mt-16 flex min-h-30 flex-col items-center justify-center gap-4">
+      {/* Waveform */}
+      <div className="mb-6 flex h-32 w-full max-w-lg items-end justify-center gap-0.5 px-2">
+        {waveform.map((bar, index) => (
+          <div
+            key={`wave-${index}`}
+            className={`min-h-1 flex-1 rounded-full transition-[height] duration-75 ${
+              state === "saving" ? "bg-muted-foreground/40" : "bg-primary/70"
+            }`}
+            style={{ height: `${Math.max(6, Math.round(bar * 120))}px` }}
+          />
+        ))}
+      </div>
+
+      {/* Controls */}
+      <div className="flex items-center gap-3">
         {state === "idle" && (
-          <Button
-            variant="destructive"
-            className="min-w-56 rounded-full bg-red-600 px-8 py-5 text-3xl font-bold text-white hover:bg-red-500"
+          <button
+            type="button"
+            className="flex size-14 items-center justify-center rounded-full bg-destructive transition-transform hover:scale-105 active:scale-95"
             onClick={handleStart}
           >
-            録音開始
-          </Button>
+            <div className="size-5 rounded-full bg-white" />
+          </button>
         )}
 
         {state === "recording" && (
-          <>
-            <div className="text-xl font-bold text-foreground">録音中...</div>
-            <Button
-              className="min-w-56 rounded-full bg-blue-700 px-8 py-5 text-3xl font-bold text-white hover:bg-blue-600"
-              onClick={handleStop}
-            >
-              停止
-            </Button>
-          </>
+          <button
+            type="button"
+            className="flex size-14 items-center justify-center rounded-full border-2 border-destructive transition-transform hover:scale-105 active:scale-95"
+            onClick={handleStop}
+          >
+            <div className="size-5 rounded-sm bg-destructive" />
+          </button>
         )}
 
         {state === "saving" && (
-          <div className="text-xl font-bold text-foreground">保存中...</div>
+          <div className="text-sm text-muted-foreground">保存中...</div>
         )}
       </div>
 
-      {error && (
-        <Alert variant="destructive" className="mt-4 text-left">
-          <AlertDescription className="text-lg">{error}</AlertDescription>
-        </Alert>
-      )}
-      {lastSaved && (
-        <Alert className="mt-4 border-emerald-800 bg-emerald-950/70 text-left text-emerald-200">
-          <AlertDescription className="text-lg">{lastSaved}</AlertDescription>
-        </Alert>
+      {/* Status messages */}
+      {state === "recording" && (
+        <p className="mt-3 text-xs text-muted-foreground">録音中</p>
       )}
 
-      <div className="mt-8">
-        <Button
-          variant="link"
-          className="text-lg text-muted-foreground hover:text-foreground"
-          onClick={() => onNavigate("list")}
-        >
-          ← 一覧に戻る
-        </Button>
+      <div className="mt-4 w-full max-w-md">
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {lastSaved && (
+          <Alert>
+            <AlertDescription>{lastSaved}</AlertDescription>
+          </Alert>
+        )}
       </div>
-    </PageLayout>
+    </div>
   );
 }
