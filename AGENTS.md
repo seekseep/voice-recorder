@@ -27,6 +27,7 @@ This file defines the implementation workflow for this repository.
 4. Frontend sends recording bytes through `save_recording`
 5. React components do not use `try/catch`; they branch on `AppResult`
 6. AppResult helper functions are named `succeed` and `fail`
+7. Prefer Tailwind utility classes for React UI before adding custom component CSS
 
 ## Workflow Rules
 

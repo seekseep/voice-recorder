@@ -23,6 +23,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::audio_file::save_recording,
+            commands::audio_file::list_audio_files,
+            commands::audio_file::get_audio_file,
+            commands::audio_file::delete_audio_file,
+            commands::audio_file::get_audio_file_bytes,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

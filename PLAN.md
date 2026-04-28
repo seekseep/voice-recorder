@@ -16,11 +16,12 @@ Phase 1 から **React** を使う。
 
 - `react`
 - `react-dom`
+- `tailwindcss`
 - Vite の React 構成に移行する
-- スタイリングはまず既存の `src/styles.css` ベースで進める
+- スタイリングは Tailwind utility class を優先する
 
-Phase 1 では Tailwind / shadcn/ui は必須にしない。  
-まず録音フローを安定させ、その後必要なら導入する。
+Phase 1 では shadcn/ui は必須にしない。  
+まず Tailwind で UI を軽く組み、必要になったら shadcn/ui を追加する。
 
 ### バックエンド
 
