@@ -28,6 +28,9 @@ Phase 1 では shadcn/ui は必須にしない。
 - Tauri command でフロントエンドから録音データを受け取る
 - Rust 側でファイル保存と SQLite 登録を行う
 - フロントエンドには保存結果だけを返す
+- Rust の DB アクセスは `src-tauri/src/commands/` ではなく `src-tauri/src/infrastructure/` に置く
+- Rust の persistence helper は目的ごとにファイル分割する
+- Rust の command wrapper は薄く保ち、response type も command file には置かない
 
 ---
 

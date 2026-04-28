@@ -1,7 +1,7 @@
 mod commands;
-mod db;
+mod infrastructure;
 
-use db::AppDb;
+use infrastructure::database::AppDb;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -22,11 +22,13 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::audio_file::save_recording,
-            commands::audio_file::list_audio_files,
-            commands::audio_file::get_audio_file,
-            commands::audio_file::delete_audio_file,
-            commands::audio_file::get_audio_file_bytes,
+            commands::audio_file::save_recording::save_recording,
+            commands::audio_file::list_audio_files::list_audio_files,
+            commands::audio_file::get_audio_file::get_audio_file,
+            commands::audio_file::delete_audio_file::delete_audio_file,
+            commands::audio_file::get_audio_file_bytes::get_audio_file_bytes,
+            commands::audio_file::convert_audio_file::convert_audio_file,
+            commands::audio_file::get_converted_file_bytes::get_converted_file_bytes,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

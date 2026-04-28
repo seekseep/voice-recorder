@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   listAudioFiles,
   deleteAudioFile,
-  type AudioFileSummary,
 } from "../../infrastructure/repositories/audio-file-repository";
 
 type Props = {
@@ -10,37 +10,31 @@ type Props = {
 };
 
 export function AudioFileListPage({ onNavigate }: Props) {
-  const [files, setFiles] = useState<AudioFileSummary[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const loadFiles = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    const result = await listAudioFiles();
-    if (result.ok) {
-      setFiles(result.data);
-    } else {
-      setError(result.error.message);
-    }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    loadFiles();
-  }, [loadFiles]);
+  const { data: files = [], isLoading, error } = useQuery({
+    queryKey: ["audioFiles"],
+    queryFn: async () => {
+      const result = await listAudioFiles();
+      if (!result.ok) throw new Error(result.error.message);
+      return result.data;
+    },
+  });
 
   const handleDelete = useCallback(
     async (id: string) => {
       const result = await deleteAudioFile(id);
       if (result.ok) {
-        await loadFiles();
+        queryClient.invalidateQueries({ queryKey: ["audioFiles"] });
       } else {
-        setError(result.error.message);
+        setActionError(result.error.message);
       }
     },
-    [loadFiles],
+    [queryClient],
   );
+
+  const displayError = error instanceof Error ? error.message : actionError;
 
   return (
     <main className="flex min-h-screen items-center justify-center px-5 py-8">
@@ -59,16 +53,16 @@ export function AudioFileListPage({ onNavigate }: Props) {
           </button>
         </div>
 
-        {loading && (
+        {isLoading && (
           <p className="text-center text-lg text-zinc-400">読み込み中...</p>
         )}
-        {error && (
+        {displayError && (
           <div className="mb-4 rounded-2xl bg-red-950/70 px-4 py-3 text-lg text-red-200">
-            {error}
+            {displayError}
           </div>
         )}
 
-        {!loading && files.length === 0 && !error && (
+        {!isLoading && files.length === 0 && !error && (
           <p className="text-center text-lg text-zinc-400">
             録音ファイルがありません
           </p>

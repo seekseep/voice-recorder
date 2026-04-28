@@ -53,3 +53,7 @@ This file defines the implementation workflow for this repository.
 6. Keep Tauri command calls in `src/infrastructure/repositories/`
 7. Keep component-facing orchestration in `src/application/usecases/`
 8. Put shared result types in `src/shared/result/`
+9. Keep Rust database access out of `src-tauri/src/commands/`
+10. Put Rust infrastructure concerns under `src-tauri/src/infrastructure/`
+11. Split Rust persistence helpers by purpose so each file name explains one function
+12. Keep Rust command wrapper files thin and move Rust command response types out of wrapper files
